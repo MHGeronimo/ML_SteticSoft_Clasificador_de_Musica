@@ -1,4 +1,15 @@
-venv
-Ficha_Proyecto_Machine_Learning (1).docx
+# Ignorar el entorno virtual de Python
+venv/
+
+# Ignorar los archivos de audio originales (demasiado pesados)
+data
+
+# Ignorar los archivos generados (se pueden recrear con los scripts)
+data/features_refactored_3_sec.csv
+models_mejorados/
+
+# Ignorar archivos de caché de Python
+__pycache__/
+*.pyc
+
 archive.zip
-Data
