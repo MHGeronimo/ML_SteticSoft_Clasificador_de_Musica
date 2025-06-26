@@ -1,4 +1,4 @@
-# src/app.py (Versión final para despliegue en Streamlit Cloud)
+# src/app.py (Versión final con Opción 1 y Opción 2 funcionales)
 
 import streamlit as st
 import pandas as pd
@@ -16,7 +16,7 @@ st.set_page_config(page_title="Clasificador de Géneros Musicales", page_icon="�
 ROOT_DIR = Path(__file__).parent.parent
 MODELS_DIR = ROOT_DIR / "models_mejorados"
 DATA_DIR = ROOT_DIR / "data"
-SAMPLES_DIR = DATA_DIR / "audio_samples" # --- NUEVO: Ruta a las muestras de audio
+SAMPLES_DIR = DATA_DIR / "audio_samples"
 
 # --- FUNCIONES DE CARGA (CACHEADAS) ---
 @st.cache_resource
@@ -60,7 +60,7 @@ def extract_features_from_audio(audio_bytes, sr=22050):
         features['perceptr_var'] = np.var(y_perc)
         tempo_array, _ = librosa.beat.beat_track(y=y, sr=sr)
         features['tempo'] = tempo_array[0] if isinstance(tempo_array, np.ndarray) and tempo_array.size > 0 else 0.0
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_cc=20)
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=20)
         for i, e in enumerate(mfcc, 1):
             features[f'mfcc{i}_mean'] = np.mean(e)
             features[f'mfcc{i}_var'] = np.var(e)
@@ -91,7 +91,7 @@ try:
     LOAD_SUCCESS = True
 except FileNotFoundError as e:
     st.error(f"Error CRÍTICO al cargar archivos: {e}")
-    st.info(f"Asegúrate que las carpetas 'models_mejorados', 'data/audio_samples' y el archivo '{DATA_DIR / 'features_refactored_3_sec.csv'}' existen en el repositorio.")
+    st.info(f"Asegúrate que las carpetas 'models_mejorados', 'data/audio_samples' y el archivo '{DATA_DIR / 'features_refactored_3_sec.csv'}' existan en el repositorio.")
     LOAD_SUCCESS = False
 except Exception as e:
     st.error(f"Ocurrió un error inesperado durante la carga: {e}")
@@ -108,32 +108,57 @@ if LOAD_SUCCESS:
 
     col1, col2 = st.columns(2, gap="large")
 
+    # --- Opción 1: Subir Archivo ---
     with col1:
         st.header("Opción 1: Sube tu archivo")
         uploaded_file = st.file_uploader("Selecciona un archivo de audio", type=["mp3", "wav", "au"], label_visibility="collapsed")
+        
         if uploaded_file:
-            # Lógica para archivo subido (sin cambios)
-            ...
+            audio_bytes = uploaded_file.read()
+            st.audio(audio_bytes, format=f'audio/{uploaded_file.type.split("/")[1]}')
+            
+            # --- CORRECCIÓN: SE RESTAURÓ LA LÓGICA DE CLASIFICACIÓN AQUÍ ---
+            if st.button("🎤 Analizar y Clasificar", use_container_width=True, key="classify_uploaded"):
+                with st.spinner("Extrayendo características del audio..."):
+                    features_df, y, sr = extract_features_from_audio(audio_bytes)
 
-    # --- CAMBIO IMPORTANTE EN LA OPCIÓN 2 ---
+                if features_df is not None:
+                    st.success("¡Análisis completado!")
+                    with st.expander("Ver Forma de Onda del Audio"):
+                        plot_waveform(y, sr)
+                    
+                    features_df_ordered = features_df[FEATURE_COLS]
+                    features_scaled = scaler.transform(features_df_ordered)
+
+                    st.subheader("🏆 Ranking de Géneros Probables")
+                    probabilities = model.predict_proba(features_scaled)[0]
+                    prob_df = pd.DataFrame({'Género': label_encoder.classes_, 'Confianza': probabilities})
+                    top_genres = prob_df.sort_values(by='Confianza', ascending=False).reset_index(drop=True)
+
+                    main_genre = top_genres.iloc[0]
+                    st.metric(label="Género Principal", value=main_genre['Género'].capitalize(), delta=f"{main_genre['Confianza']:.1%} de confianza")
+
+                    if len(top_genres) > 1:
+                        st.write("**Posibles géneros secundarios:**")
+                        for _, row in top_genres.iloc[1:3].iterrows():
+                            st.write(f"- **{row['Género'].capitalize()}** con {row['Confianza']:.1%} de confianza.")
+
+                    with st.expander("Ver desglose de confianza para todos los géneros"):
+                        st.bar_chart(prob_df.set_index('Género'))
+
+    # --- Opción 2: Usar Muestra ---
     with col2:
         st.header("Opción 2: Usar una muestra")
-        # El dropdown ahora muestra géneros, no una lista gigante de archivos.
         sample_genres = sorted(label_encoder.classes_)
         selected_genre = st.selectbox("Selecciona un género de muestra:", options=sample_genres)
 
-        if st.button("🎶 Clasificar Muestra", use_container_width=True):
-            # Construimos el nombre del archivo de muestra que debe existir
-            # en la carpeta `data/audio_samples`
+        if st.button("🎶 Clasificar Muestra", use_container_width=True, key="classify_sample"):
             sample_audio_filename = f"{selected_genre}.00000.wav"
             sample_audio_path = SAMPLES_DIR / sample_audio_filename
-
-            # Buscamos las características del primer segmento de esa canción en el CSV
             sample_feature_filename = f"{selected_genre}.00000.0.wav"
             song_data = df[df['filename'] == sample_feature_filename]
 
             if not song_data.empty and sample_audio_path.is_file():
-                # Realizar predicción
                 song_features = song_data[FEATURE_COLS]
                 features_scaled = scaler.transform(song_features)
                 prediction_encoded = model.predict(features_scaled)
@@ -141,7 +166,6 @@ if LOAD_SUCCESS:
 
                 st.success(f"El género predicho para la muestra de '{selected_genre.capitalize()}' es: **{prediction_label.capitalize()}**")
                 
-                # Reproducir el audio desde la carpeta de muestras
                 audio_bytes = sample_audio_path.read_bytes()
                 st.audio(audio_bytes, format='audio/wav')
                 
@@ -151,4 +175,3 @@ if LOAD_SUCCESS:
                 st.error(f"No se encontraron datos en el CSV para la canción: '{sample_feature_filename}'")
 else:
     st.warning("La aplicación no puede funcionar hasta que se resuelvan los errores de carga de archivos.")
-

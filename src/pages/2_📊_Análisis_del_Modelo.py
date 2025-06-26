@@ -11,34 +11,29 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from pathlib import Path
 
 # --- MANEJO DE RUTAS ROBUSTO ---
-# Funciona correctamente desde la subcarpeta /pages
 ROOT_DIR = Path(__file__).parent.parent.parent
-# --- CAMBIO 1: Apuntar a la nueva carpeta de modelos ---
 MODELS_DIR = ROOT_DIR / "models_mejorados"
 DATA_DIR = ROOT_DIR / "data"
 
 # --- FUNCIONES ---
 @st.cache_resource
 def load_artifacts():
-    # --- CAMBIO 2: Cargar los NUEVOS archivos .joblib ---
     model = joblib.load(MODELS_DIR / 'modelo_mejorado.joblib')
     label_encoder = joblib.load(MODELS_DIR / 'encoder_mejorado.joblib')
-    scaler = joblib.load(MODELS_DIR / 'scaler_mejorado.joblib') # También cargamos el nuevo scaler
+    scaler = joblib.load(MODELS_DIR / 'scaler_mejorado.joblib')
     return model, scaler, label_encoder
 
 @st.cache_data
-def get_test_data(_scaler, _label_encoder): # Pasamos scaler y encoder para consistencia
+def get_test_data(_scaler, _label_encoder):
     """
-    Carga el NUEVO dataset, lo procesa y devuelve los datos de prueba.
+    Carga el dataset, lo procesa y devuelve los datos de prueba.
     """
-    # --- CAMBIO 3: Cargar el NUEVO archivo CSV ---
-    df = pd.read_csv(DATA_DIR / 'features_59_char_3_sec.csv')
+    # --- CORRECCIÓN: Apuntar al nombre correcto del archivo CSV ---
+    df = pd.read_csv(DATA_DIR / 'features_refactored_3_sec.csv')
     
-    # El nuevo CSV no tiene la columna 'length', así que la quitamos del drop
     X = df.drop(['filename', 'label'], axis=1)
     y = df['label']
     
-    # Usamos los artefactos ya cargados para asegurar consistencia
     y_encoded = _label_encoder.transform(y)
     X_scaled = _scaler.transform(X)
 
@@ -51,13 +46,14 @@ try:
     X_test, y_test = get_test_data(scaler, label_encoder)
     LOAD_SUCCESS = True
 except FileNotFoundError:
-    st.error("Error al cargar archivos. Asegúrate de que la carpeta 'models_mejorados' y el archivo 'features_59_char_3_sec.csv' existan.")
+    # --- CORRECCIÓN: Mensaje de error actualizado ---
+    st.error("Error al cargar archivos. Asegúrate de que la carpeta 'models_mejorados' y el archivo 'features_refactored_3_sec.csv' existan.")
     LOAD_SUCCESS = False
 
 # --- INTERFAZ ---
 st.set_page_config(page_title="Análisis del Modelo", page_icon="📊")
-st.title("📊 Análisis de Rendimiento del Modelo v2")
-st.write("Aquí evaluamos el rendimiento de nuestro `RandomForestClassifier` **mejorado** (entrenado con 59 características).")
+st.title("📊 Análisis de Rendimiento del Modelo")
+st.write("Aquí evaluamos el rendimiento de nuestro `RandomForestClassifier` (entrenado con 59 características).")
 
 if LOAD_SUCCESS:
     y_pred = model.predict(X_test)
